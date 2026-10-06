@@ -4,3 +4,7 @@
 __pycache__/
 downloads/
 *.part
+*.md
+test_folder.py
+test_url.py
+url_checker.py

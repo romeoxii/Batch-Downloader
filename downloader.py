@@ -2,6 +2,7 @@ import requests
 from pathlib import Path
 import time
 from urllib.parse import urlparse
+import hashlib
 
 
 # Build a progress bar
@@ -48,7 +49,7 @@ def calc_eta(d_mb, t_mb, speed):
 
     minutes, seconds = divmod(int(eta), 60)
 
-    return minutes, seconds
+    return minutes, seconds, eta
 
 
 # Convert a Content-Length value to an integer
@@ -70,9 +71,9 @@ def show_progress(d_loaded, t_size, e_time):
         speed = calc_speed(d_mb, e_time)
         return speed, percentage, bar, t_mb, d_mb
     else:
-        d_mb_2 = to_mb(d_loaded)
-        speed = calc_speed(d_mb_2, e_time)
-        return speed, d_mb_2
+        downloaded_mb_2 = to_mb(d_loaded)
+        speed = calc_speed(downloaded_mb_2, e_time)
+        return speed, downloaded_mb_2
 
 
 # Validate a URL
@@ -123,52 +124,19 @@ class Downloader:
 
     # Initialize downloader state and HTTP session
     def __init__(self):
-        self.urls = []
         self.session = requests.Session()
         self.folder = Path("downloads")
-        self.successful = 0
-        self.skipped = 0
-        self.failed = 0
 
     def __enter__(self):
         return self
 
+    def get_temp_path(self, url):
+        temp_path = hashlib.sha256(url.encode()).hexdigest()
 
-    # Check whether the destination file already exists
-    def check_existing_file(self, file_path):
-        if file_path.exists():
-            print(f"{file_path.name} exists")
-            self.skipped += 1
-            return True
-        return False
-
-
-    # Process all queued downloads
-    def process_downloads(self):
-        if not self.urls:
-            print("No URLs were added!!")
-            return
-
-        for url in self.urls:
-            filename = get_filename(url)
-            file_path = self.folder / filename
-
-            if self.check_existing_file(file_path):
-                continue
-                 
-            result = self.download(url, file_path)
-
-            if result:
-                self.successful += 1
-            else:
-                self.failed += 1
-                print('download failed')
+        temp_path = temp_path + ".part"
+        temp_path = self.folder / temp_path
         
-        print("Download Summary:\n")
-        print("----------------")
-        print(f"Successful: {self.successful}")
-        print(f"Skipped: {self.skipped}")
-        print(f"Failed: {self.failed}")
+        return temp_path
 
 
     # Determine whether a partial download can be resumed
@@ -196,10 +164,24 @@ class Downloader:
             total_size = get_con_length(content_length)
         return total_size
 
+    @staticmethod
+    def return_filename(cntnt_disposition):
+        if cntnt_disposition is None:
+            return None
+
+
+        res = cntnt_disposition.split(";")
+        for x in res:
+            x.strip(' ')
+            if x.startswith("filename"):
+                x = x.split('=')
+                filename = x[1].strip(' "')
+                return filename
+        return None
 
     # Prepare the HTTP response and download metadata
-    def prepare_download(self, url, file_path):
-        temp_path = file_path.with_suffix(file_path.suffix + '.part')
+    def prepare_download(self, url, filename=None):
+        temp_path = self.get_temp_path(url)
 
         downloaded = check_part(temp_path)
         headers = get_range(downloaded)
@@ -212,9 +194,14 @@ class Downloader:
 
         code, reason = check_response(response)
 
+        print(f"CL: {response.headers.get("Content-Length")}")
+        print(f"CR: {response.headers.get("Content-Range")}")
+        print(f"CD: {response.headers.get("Content-Disposition")}")
+        print(f"final url: {url}")
+
         if not code == 200 and not code == 206:
             print(f"Preparing the download failed.: {reason}")
-            return None
+            return False, code, reason, None, None, None, None, None
         
         print(f"Can Download?: {reason}")
 
@@ -222,10 +209,20 @@ class Downloader:
 
         content_length = response.headers.get("Content-Length")
         content_range = response.headers.get("Content-Range")
+        content_disposition = response.headers.get("Content-Disposition")
+        filetype = response.headers.get("Content-Type")
 
         total_size = self.get_total_size(code, content_length, content_range)
+
+        if filename is None:
+            derived_filename = self.return_filename(content_disposition)
+            if derived_filename is None:
+                derived_filename = get_filename(url)
+            filename = derived_filename
+
+        final_path = self.folder / filename
         
-        return temp_path, downloaded, response, total_size
+        return True, temp_path, final_path, downloaded, response, total_size, filename, filetype
 
 
     @staticmethod
@@ -233,73 +230,64 @@ class Downloader:
         if total_size:
             speed, percentage, bar, t_mb, d_mb = show_progress(downloaded, total_size, elapsed_time)
             
-            minutes, seconds = calc_eta(d_mb, t_mb, speed)
+            minutes, seconds, eta = calc_eta(d_mb, t_mb, speed)
             
-            print(f"\rDownloading:[{bar}] {percentage:.1f}% {d_mb:.1f} MB / {t_mb:.1f} MB | {speed:.2f} MB/s | ETA: {minutes:02d}:{seconds:02d} ", end="")
-            
+            # print(f"\rDownloading:[{bar}] {percentage:.1f}% {d_mb:.1f} MB / {t_mb:.1f} MB | {speed:.2f} MB/s | ETA: {minutes:02d}:{seconds:02d} ", end="")
+            return {"speed": speed, "percentage": percentage, "downloaded":downloaded, "total_size": total_size, "eta_minutes":minutes, "eta_seconds":seconds}
         else:
-            speed, d_mb_2 = show_progress(downloaded, total_size, elapsed_time)
-            print(f"\rDownloading: {d_mb_2:.1f} MB | {speed:.2f} MB/s", end="")
+            speed, downloaded_mb_2 = show_progress(downloaded, total_size, elapsed_time)
+            # print(f"\rDownloading: {downloaded_mb_2:.1f} MB | {speed:.2f} MB/s", end="")
+            return {"speed": speed, "downloaded":downloaded_mb_2}
 
 
     # Download the file in chunks to avoid loading it into memory
-    def download_chunks(self, temp_path, file_path, downloaded, res, total_size):
+    def download_chunks(self, temp_path, final_path, downloaded, res, total_size, progress_callback):
         start_time = time.time()
         with open(temp_path, 'ab' if downloaded > 0 else 'wb') as file:
             for chunk in res.iter_content(chunk_size=8192):
                 if chunk:
                     file.write(chunk)
 
+                    # raise Exception("Test download failure")
                     downloaded += len(chunk)
                     elapsed_time = time.time() - start_time
-                    self.show_download_progress(downloaded, total_size, elapsed_time)
-                        
-        print(f"\nDownloading {file_path} complete.")
-        temp_path.rename(file_path)
+                    progress = self.show_download_progress(downloaded, total_size, elapsed_time)
+                    progress_callback(progress)
+                
+        print(f"\nDownloading {final_path} complete.")
+        temp_path.rename(final_path)
         return True
 
 
     # Coordinate the download process and handle errors
-    def download(self, url, file_path):
-                    
+    def download(self, url, progress_callback, filename=None):
+            
             try:
-                result = self.prepare_download(url, file_path)
+                result = self.prepare_download(url, filename)
+
+                success, temp_path,final_path, downloaded, response, total_size, file_name, file_type = result
+                if not success:
+                    code = temp_path
+                    reason = downloaded
+                    return False, code, reason, None, None
     
-                if result is None:
-                    return False
-    
-                temp_path, downloaded, response, total_size = result
-                res = self.download_chunks(temp_path, file_path, downloaded, response, total_size)
-                return res
+                res = self.download_chunks(temp_path, final_path,  downloaded, response, total_size, progress_callback)
+                return True, None, None, file_name, file_type
                 
             
             except requests.RequestException as error:
                 print(f"\nDownload failed: {error}")
-                print(f"Partial file saved at: {temp_path}")
-                return False
+                return False, None, error, None, None
             
             except KeyboardInterrupt:
                 print(f"\nDownload interrupted")
-                if temp_path:
-                    print(f"Partial file saved at: {temp_path}")
-                return False
+                return False, None, "Download interrupted", None, None
         
             except Exception as error:
                 print(f"\nUnexpected error: {error}")
-                return False
+                return False, None, error, None, None
 
 
     # Close the HTTP session
     def __exit__(self, exc_type, exc, tb):
         self.session.close()
-
-
-def main():
-
-    with Downloader() as downloader:
-        downloader.get_urls()
-        downloader.process_downloads()
-
-
-if __name__=="__main__":
-    main()
