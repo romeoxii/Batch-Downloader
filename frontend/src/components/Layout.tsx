@@ -1,6 +1,6 @@
 import { Link, NavLink, Outlet } from "react-router-dom";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { Download04Icon, GithubIcon } from "@hugeicons/core-free-icons";
+import { GithubIcon } from "@hugeicons/core-free-icons";
 
 // Update this if the repository URL changes.
 const GITHUB_URL = "https://github.com/romeoxii/Batch-Downloader";
@@ -18,9 +18,11 @@ export function Layout() {
       <header className="sticky top-0 z-20 border-b border-neutral-200 bg-white/90 backdrop-blur-sm">
         <nav className="mx-auto flex h-14 w-full max-w-5xl items-center justify-between px-4 sm:px-6">
           <Link to="/" className="flex items-center gap-2">
-            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-black text-white">
-              <HugeiconsIcon icon={Download04Icon} size={14} strokeWidth={2} />
-            </span>
+            <img
+              src="/image.png"
+              alt=""
+              className="h-7 w-7 rounded-lg object-cover"
+            />
             <span className="text-sm font-semibold tracking-tight lowercase">
               fetchflow
             </span>

@@ -42,7 +42,7 @@ export function Home() {
           fetchflow
         </h1>
 
-        <p className="mt-4 max-w-md text-base text-neutral-500 sm:text-lg">
+        <p className="mt-2 max-w-md text-sm text-neutral-400">
           a batch downloader that just downloads.
         </p>
 
