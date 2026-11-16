@@ -1,30 +1,31 @@
 import { Job } from "../types/download";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { AlertCircleIcon } from "@hugeicons/core-free-icons";
 
-export function FailedJob({ job }: { job: Job }) {
+export function FailedJob({
+  job,
+  onRetry,
+}: {
+  job: Job;
+  onRetry: (url: string) => Promise<boolean>;
+}) {
   return (
-    <div className="max-w-md mx-auto flex flex-col items-center space-y-1 bg-red-700/10 shadow-sm ring-1 ring-red-300 rounded-md p-2">
-      <span className="text-red-500 text-2xl">
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          width="1em"
-          height="1em"
-          viewBox="0 0 24 24"
-        >
-          <path d="M0 0h24v24H0z" fill="none" />
-          <g
-            fill="none"
-            stroke="currentColor"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="1.5"
-          >
-            <path d="M13.925 21h-3.85c-4.63 0-6.945 0-7.799-1.506c-.853-1.506.331-3.503 2.7-7.495L6.9 8.753C9.176 4.918 10.313 3 12 3s2.824 1.918 5.1 5.753L19.023 12c2.369 3.992 3.553 5.989 2.7 7.495C20.87 21 18.555 21 13.924 21M12 9v4" />
-            <path d="M12.125 16.75H12m.25 0a.25.25 0 1 1-.5 0a.25.25 0 0 1 .5 0" />
-          </g>
-        </svg>
-      </span>
-      <p className="text-sm text-red-800">Download failed</p>
-      <p className="text-xs text-red-600">{job.error}</p>
+    <div className="flex flex-col items-center gap-1.5 rounded-2xl border border-neutral-200 bg-white p-4 text-center">
+      <HugeiconsIcon
+        icon={AlertCircleIcon}
+        size={24}
+        strokeWidth={1.5}
+        className="text-black"
+      />
+      <p className="text-sm text-black lowercase">download failed</p>
+      <p className="text-xs text-neutral-500">{job.error}</p>
+      <button
+        type="button"
+        className="mt-1 rounded-full border border-neutral-200 px-4 py-1.5 text-xs font-medium text-black transition hover:bg-neutral-50"
+        onClick={() => onRetry(job.url)}
+      >
+        retry
+      </button>
     </div>
   );
 }

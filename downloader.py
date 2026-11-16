@@ -5,6 +5,7 @@ from urllib.parse import urlparse
 import hashlib
 
 
+
 # Build a progress bar
 def progress_bar(percentage):
     bar_length = 20
@@ -126,6 +127,7 @@ class Downloader:
     def __init__(self):
         self.session = requests.Session()
         self.folder = Path("downloads")
+        self.folder.mkdir(parents=True, exist_ok=True)
 
     def __enter__(self):
         return self
@@ -179,6 +181,10 @@ class Downloader:
                 return filename
         return None
 
+    @staticmethod
+    def check_if_file_exists(f):
+        return f.exists()
+    
     # Prepare the HTTP response and download metadata
     def prepare_download(self, url, filename=None):
         temp_path = self.get_temp_path(url)
@@ -201,7 +207,7 @@ class Downloader:
 
         if not code == 200 and not code == 206:
             print(f"Preparing the download failed.: {reason}")
-            return False, code, reason, None, None, None, None, None
+            return "failed", code, reason, None, None, None, None, None
         
         print(f"Can Download?: {reason}")
 
@@ -221,8 +227,14 @@ class Downloader:
             filename = derived_filename
 
         final_path = self.folder / filename
+
+        already_exists = self.check_if_file_exists(final_path)
+
         
-        return True, temp_path, final_path, downloaded, response, total_size, filename, filetype
+        if not already_exists:
+            return "ready", temp_path, final_path, downloaded, response, total_size, filename, filetype
+
+        return "exists", temp_path, final_path, downloaded, response, total_size, filename, filetype
 
 
     @staticmethod
@@ -241,10 +253,13 @@ class Downloader:
 
 
     # Download the file in chunks to avoid loading it into memory
-    def download_chunks(self, temp_path, final_path, downloaded, res, total_size, progress_callback):
+    def download_chunks(self, temp_path, final_path, downloaded, res, total_size, progress_callback, cancel_event):
         start_time = time.time()
         with open(temp_path, 'ab' if downloaded > 0 else 'wb') as file:
             for chunk in res.iter_content(chunk_size=8192):
+                if cancel_event.is_set():
+                    return "cancelled"
+                
                 if chunk:
                     file.write(chunk)
 
@@ -256,37 +271,42 @@ class Downloader:
                 
         print(f"\nDownloading {final_path} complete.")
         temp_path.rename(final_path)
-        return True
+        return "completed"
 
 
     # Coordinate the download process and handle errors
-    def download(self, url, progress_callback, filename=None):
+    def download(self, url, progress_callback, filename=None, cancel_event=None):
             
             try:
                 result = self.prepare_download(url, filename)
 
-                success, temp_path,final_path, downloaded, response, total_size, file_name, file_type = result
-                if not success:
+                status, temp_path, final_path, downloaded, response, total_size, file_name, file_type = result
+                if status == "exists":
+                    return "exists", None, None, file_name, file_type
+
+                if status == "failed":
                     code = temp_path
                     reason = downloaded
-                    return False, code, reason, None, None
+                    return "failed", code, reason, None, None
     
-                res = self.download_chunks(temp_path, final_path,  downloaded, response, total_size, progress_callback)
-                return True, None, None, file_name, file_type
+                res = self.download_chunks(temp_path, final_path,  downloaded, response, total_size, progress_callback, cancel_event)
+                if res == "cancelled":
+                   return "cancelled", None, None, file_name, file_type
+                
+                return "completed", None, None, file_name, file_type
                 
             
             except requests.RequestException as error:
                 print(f"\nDownload failed: {error}")
-                return False, None, error, None, None
-            
+                return "failed", None, error, None, None
+
             except KeyboardInterrupt:
                 print(f"\nDownload interrupted")
-                return False, None, "Download interrupted", None, None
-        
+                return "failed", None, "Download interrupted", None, None
+
             except Exception as error:
                 print(f"\nUnexpected error: {error}")
-                return False, None, error, None, None
-
+                return "failed", None, error, None, None
 
     # Close the HTTP session
     def __exit__(self, exc_type, exc, tb):

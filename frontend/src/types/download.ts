@@ -7,7 +7,13 @@ export interface Progress {
   eta_seconds: number;
 }
 
-export type JobStatus = "pending" | "downloading" | "completed" | "failed";
+export type JobStatus =
+  | "exists"
+  | "pending"
+  | "downloading"
+  | "completed"
+  | "failed"
+  | "cancelled";
 
 export interface Job {
   id: string;
@@ -17,4 +23,5 @@ export interface Job {
   filetype: string | null;
   progress: Progress | null;
   error: string | null;
+  cancel_event: Function;
 }

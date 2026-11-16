@@ -1,30 +1,20 @@
 import { Job } from "../types/download";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { Tick02Icon } from "@hugeicons/core-free-icons";
 
 export function CompletedJob({ job }: { job: Job }) {
   return (
-    <div className="max-w-md mx-auto flex items-center justify-between gap-2 bg-green-800/10 ring-1 ring-green-800/90 rounded-md px-2 py-1">
-      <p className="text-green-900 text-sm">
-        {job.name} downloaded successfully
+    <div className="flex items-center justify-between gap-3 rounded-2xl border border-neutral-200 bg-white px-4 py-3">
+      <p className="truncate text-sm text-black">
+        {job.name} <span className="text-neutral-500">downloaded successfully</span>
       </p>
 
-      <span className="text-2xl text-green-800">
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          width="1em"
-          height="1em"
-          viewBox="0 0 24 24"
-        >
-          <path d="M0 0h24v24H0z" fill="none" />
-          <g fill="none" stroke="currentColor" stroke-width="1.5">
-            <path d="M22 12c0-5.523-4.477-10-10-10S2 6.477 2 12s4.477 10 10 10s10-4.477 10-10Z" />
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              d="M8 12.75s1.6.912 2.4 2.25c0 0 2.4-5.25 5.6-7"
-            />
-          </g>
-        </svg>
-      </span>
+      <HugeiconsIcon
+        icon={Tick02Icon}
+        size={20}
+        strokeWidth={1.5}
+        className="shrink-0 text-black"
+      />
     </div>
   );
 }

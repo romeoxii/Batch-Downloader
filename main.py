@@ -7,6 +7,7 @@ from folder_lister import FolderLister
 import uuid
 from url_checker import is_file_or_folder
 
+
 app = FastAPI()
 
 app.add_middleware(
@@ -57,7 +58,6 @@ def download_file(request: DownloadRequest, background_task: BackgroundTasks):
 		
 		raise HTTPException(status_code=404, detail="Url Invalid")
 	
-			
 
 @app.get('/downloads/{job_id}')
 def get_job(job_id):
@@ -66,3 +66,16 @@ def get_job(job_id):
 
 	job_found = batch.jobs[job_id]
 	return job_found
+
+
+@app.post('/downloads/{job_id}/cancel')
+def cancel_job(job_id):
+	if job_id not in batch.jobs:
+		raise HTTPException(status_code=404, detail="Item not found")
+
+	cancelled = batch.cancel_job(job_id)
+
+	if not cancelled:
+		raise HTTPException(status_code=404, detail="Item not found")
+
+	return {"status": "cancelled"}
